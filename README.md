@@ -98,11 +98,11 @@ proc home_page(req:Request,  res:Response):void{
 ```
 
 # Warning.
-This is the heavely untestested. It is not secure nor production ready! 
+This is the heavly untested. It is not secure nor production ready! 
 
 # TODO
 
-* The documentation.
+* The Documentation.
 * Session Menangement.
 * Serve content from filesystem.
 * JWT Token.
