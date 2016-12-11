@@ -120,7 +120,7 @@ class Server{
     writeln(this.address);
     this.ebase = event_base_new();
     this.server = evhttp_new(this.ebase);
-    evhttp_set_allowed_methods(this.server, EVHTTP_REQ_GET|EVHTTP_REQ_POST);
+    evhttp_set_allowed_methods(this.server, EVHTTP_REQ_GET|EVHTTP_REQ_POST|EVHTTP_REQ_CONNECT|EVHTTP_REQ_HEAD|EVHTTP_REQ_OPTIONS|EVHTTP_REQ_PUT|EVHTTP_REQ_TRACE);
     CreateServerCB(this.server);
     this.routerHandler = new Router(); 
   }
@@ -304,8 +304,13 @@ proc Process(request:c_ptr(evhttp_request),  privParams:opaque){
       writeln(this.GetRouterDomain.member(path)," = ",path);
           if(this.GetRouterDomain.member(path)!=false){
             var controller = this.GetList[path];       
-            controller(req,res);
+           
             writeln("Served ", path);
+           
+           
+             
+           controller(req,res);
+           
           }else{
             res.E404();
           }      
@@ -314,7 +319,7 @@ proc Process(request:c_ptr(evhttp_request),  privParams:opaque){
     if(cmd=="POST"){
           if(this.PostRouterDomain.member(path)!=false){
             var controller = this.PostList[path];       
-            controller(req,res);
+           controller(req,res);
             writeln("Served ", path);
           }else{
             res.E404();
@@ -398,6 +403,11 @@ class Request{
   var uri:c_ptr(evhttp_uri);
   var uriStr:string;
   var OutHeaders:c_ptr(evkeyvalq);
+  
+  var CookieDomain: domain(string);
+  var cookies:[CookieDomain]string; 
+
+  
   proc Request(request:c_ptr(evhttp_request),  privParams:opaque){
     this.handle = request;
     this.buffer = evhttp_request_get_input_buffer(this.handle);
@@ -417,6 +427,14 @@ class Request{
 
     if(this.getCommand()=="PUT"){
       this.ParseBody();
+    }
+
+
+    var str=this.GetHeader("Cookie");
+    var parts = str.split("; ");
+    for part in parts{
+      var kv = part.split("=");
+        this.cookies[kv[1]]=kv[2];
     }
  
   }
@@ -474,12 +492,18 @@ proc GetHeader(header:string ):string{
 }
 /*
 Gets Cookie
-TODO: Pares cookie content.
 */
-  proc GetCookie(){
-    writeln(this.GetHeader("Cookie"));
+  proc GetCookie(key:string):string{
+    if(this.CookieDomain.member(key)){
+      return this.cookies[key]; 
+    }else{
+      return "";
+    }
   }
 
+  proc ListCookies(){
+   return this.cookies;
+  }
 }
 /*
 Response Class.
@@ -557,10 +581,11 @@ TODO: Add options.
 This function is a trampoline for the callback.
 */
 export proc http_handler( request:c_ptr(evhttp_request), privParams:opaque){
+  
     for hd in handlerDomain{
-      //Calls all routers
-      handlerList[hd].getRouter().Process(request, privParams);
-    }
+      //Calls all routerss
+    handlerList[hd].getRouter().Process(request, privParams);      
+    
  }
 }
-
+}

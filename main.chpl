@@ -23,8 +23,14 @@
 module Main{
 use Http;
 
+proc teste(){
+    writeln("TESTE");
+}
+
 proc main(){
 
+    
+    
     //Creates A server in the port 9000
     var server =new Server("127.0.0.1",9000);
     //Get  url Router object
@@ -33,7 +39,7 @@ proc main(){
     routerHandler.Get("/",lambda(req:Request, res:Response):void{
         //req representes the current request, res represents the current response
         //content of the page
-    var html="<html><body>\
+   var html="<html><body>\
     <form method='POST' action='/'>\
     Login:</br>\
     <input name='login'>\
@@ -44,18 +50,26 @@ proc main(){
     <a href='/home'>Home</a>\
     </body>\
     </html>";
+
+
+    res.SetCookie("Teste1","1");
+    res.SetCookie("Teste2","2");
+
+
+  
     // res.Write method puts contents to the response buffer.
     res.Write(html);
-    //Send the buffer to the client
-    res.Send();
+ 
+ 
+  res.Send();
   });
 //Assigns POST /url to a anonymous function
  routerHandler.Post("/",lambda(req:Request,  res:Response):void{
-
-     //Gets the parameters from form.
+//Gets the parameters from form.
      var login:string = req.Input("login"); 
      var password = req.Input("password");
 
+     
      if(password=="123456"){
          res.Write("Welcome ", login,"! You are logged");
      }else{
@@ -77,6 +91,15 @@ proc main(){
 
 //Controller function that will handle the GET /home request.
 proc home_page(req:Request,  res:Response):void{
+
+   writeln( req.GetCookie("Teste1"));
+   writeln( req.GetCookie("Teste2"));
+
+   var cc = req.ListCookies();
+   for k in cc.domain{
+       writeln(k,">>",cc[k]);
+   }
+
     res.Write("Hello World!! <a href='/'>Back</a>");
     res.Send();
 }
