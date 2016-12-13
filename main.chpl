@@ -23,18 +23,50 @@
 module Main{
 use Http;
 
-proc teste(){
-    writeln("TESTE");
+
+//This middleware logs uri in console.
+class TestMiddleware:Middleware{
+
+    proc Run(ref req:Request, ref res:Response){
+        writeln("Middleware3::  My Uri =",req.getUri() );
+    }
+}
+
+//This middleware class 
+class TestMiddleware2:Middleware{
+
+
+    proc Run(ref req:Request, ref res:Response){
+       
+      var cc = req.ListCookies();
+      
+      for k in cc.domain{
+            writeln("Middleware2:: Cookie:",k,">>",cc[k]);
+      }
+
+    }
+}
+//This middleware class logs user agent
+class TestMiddleware3:Middleware{
+
+
+    proc Run(ref req:Request, ref res:Response){
+
+        writeln("Middleware3:: User Agent:",req.GetHeader("User-Agent"));
+       
+    }
 }
 
 proc main(){
-
-    
-    
     //Creates A server in the port 9000
     var server =new Server("127.0.0.1",9000);
     //Get  url Router object
     var routerHandler = server.getRouter();
+
+    //Register the middlewares object
+    routerHandler.Middlewares((new TestMiddleware()):Middleware,new TestMiddleware2(),new TestMiddleware3());
+
+
     //Assigns GET / url to a anonymous function 
     routerHandler.Get("/",lambda(req:Request, res:Response):void{
         //req representes the current request, res represents the current response
@@ -43,7 +75,7 @@ proc main(){
     <form method='POST' action='/'>\
     Login:</br>\
     <input name='login'>\
-    Password:</br>\
+    <br/>Password:\
     <input name='password'>\
     <button>Ok</button>\
     </form><br/>\
@@ -94,11 +126,6 @@ proc home_page(req:Request,  res:Response):void{
 
    writeln( req.GetCookie("Teste1"));
    writeln( req.GetCookie("Teste2"));
-
-   var cc = req.ListCookies();
-   for k in cc.domain{
-       writeln(k,">>",cc[k]);
-   }
 
     res.Write("Hello World!! <a href='/'>Back</a>");
     res.Send();

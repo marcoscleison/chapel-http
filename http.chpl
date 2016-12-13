@@ -22,7 +22,7 @@ module Http{
 use SysBasic;
 use Regexp;
 use Random;
-
+use List;
 require "event2/buffer.h";
 require "event2/event.h";
 require "event2/http.h";
@@ -111,7 +111,7 @@ class Server{
   var addr:string;
   var port:int; 
   var address:string;
-
+ 
   proc Server(addr:string, port:int){
 
     this.addr = addr;
@@ -128,6 +128,9 @@ class Server{
   proc getRouter():Router{
     return this.routerHandler;
   }
+
+
+
   /*
   Gets ip binding  Address
   */
@@ -172,6 +175,29 @@ proc RegisterServer(server:Server){
   handlerList[server.getAddress()] = server;
 }
 
+
+/*
+Middleware 
+*/
+
+class Middleware{
+
+    proc Run(ref req:Request, ref res:Response){
+
+    }
+}
+
+class DummyMiddleware:Middleware{
+
+    proc Run(ref req:Request, ref res:Response){
+
+      //writeln("Dummy request");
+
+    }
+}
+
+
+
 /*
 Url router class.
 This class registers and routes the requests to chapel function accoriding to http verbs and registred urls.
@@ -180,8 +206,13 @@ This class registers and routes the requests to chapel function accoriding to ht
 
 class Router{
 
-var MiddleWareDomain:domain(string);
-var MiddleWareList:[MiddleWareDomain]func(Request,  Response, func(Request,  Response) ,void);
+//var MiddleWareDomain:domain(string);
+
+//var MiddlewareList:[1..2]Middleware;
+var MiddlewareList:list(Middleware.type);
+//var MiddlewareList:[{1..3}]func(Request,  Response,(Request,Response));
+//var MiddlewareDomain:domain(1)={1..2}
+//var MiddlewareList:[MiddlewareDomain]func(Request,  Response,(Request,Response));
 
 var GetRouterDomain: domain(string);
 var GetList:[GetRouterDomain]func(Request,  Response,void);
@@ -215,13 +246,18 @@ var PatchList:[PatchRouterDomain]func(Request,  Response,void);
 
 
   }
+
 /*
 TODO: Add middleware request interceptors
 */
-  proc Middelware(foo:func(Request,  Response)){
+proc Middlewares(x ...?k){
+  this.MiddlewareList = makeList((...x));
+}
 
-  }
-
+proc getMiddleware(){
+  return this.MiddlewareList;
+}
+ 
   /*
 Assigns GET url to a function handler.
   */
@@ -296,9 +332,21 @@ proc Process(request:c_ptr(evhttp_request),  privParams:opaque){
     var uri =  evhttp_uri_parse_with_flags(uris.localize().c_str(),0);
     var path = new string(evhttp_uri_get_path(uri));
     var req = new  Request(request,privParams);
+  
     var cmd = req.getCommand();
+
     var res = new Response(request,privParams);
 
+    var middlewares = this.getMiddleware();
+
+    //var reqres:(Request,Response) = (_req,_res);
+    //var (req,res) = reqres;
+
+    for mdl in  middlewares{
+       if(mdl!=nil){
+          mdl.Run(req,res);
+       }
+    }
     if(cmd=="GET"){
 
       writeln(this.GetRouterDomain.member(path)," = ",path);
@@ -409,6 +457,7 @@ class Request{
 
   
   proc Request(request:c_ptr(evhttp_request),  privParams:opaque){
+
     this.handle = request;
     this.buffer = evhttp_request_get_input_buffer(this.handle);
     this.uriStr = new string( evhttp_request_get_uri(this.handle));
@@ -438,6 +487,9 @@ class Request{
     }
  
   }
+
+
+
 /*
 Parses the uri parametrs
 */
@@ -455,6 +507,11 @@ Parses the body of POST,PUT etc. requests
     var dados = new string(buff=data, length=len, size=len+1, owned=true, needToCopy=false);
     evhttp_parse_query_str(dados.localize().c_str(), this.params);
   }
+
+
+proc getUri():string{
+  return this.uriStr;
+}
 
 /*
 Gets request parameter by name.
@@ -555,9 +612,9 @@ Sends the content to the client
   /*
   Error msg
   */
-  proc E404(str:string=""){
-    this.Write("Not Found");
-    this.Send(404,"Not Found");
+  proc E404(str:string="Not Found"){
+    this.Write(str);
+    this.Send(404,str);
   }
   /*
   
@@ -581,7 +638,7 @@ TODO: Add options.
 This function is a trampoline for the callback.
 */
 export proc http_handler( request:c_ptr(evhttp_request), privParams:opaque){
-  
+  var req = request;
     for hd in handlerDomain{
       //Calls all routerss
     handlerList[hd].getRouter().Process(request, privParams);      
