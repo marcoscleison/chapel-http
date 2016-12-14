@@ -23,6 +23,10 @@ use SysBasic;
 use Regexp;
 use Random;
 use List;
+use IO;
+use FileSystem;
+use Path;
+
 require "event2/buffer.h";
 require "event2/event.h";
 require "event2/http.h";
@@ -187,6 +191,74 @@ class Middleware{
     }
 }
 
+class FileMiddleware:Middleware{
+
+  var ROOT_PATH:string;
+  var public_dir:string;
+  proc FileMiddleware(public_dir:string="public"){
+
+    var err: syserr = ENOERR;
+
+    var cwds:string = ".";//locale.cwd(err);
+    
+    if err != ENOERR then ioerror(err, "in Opening Current Server Public Path.");
+
+
+    this.ROOT_PATH=cwds+"/"+public_dir;
+    this.public_dir=public_dir;
+  }
+    proc Run(ref req:Request, ref res:Response){
+      if(req.getCommand()=="GET"){
+        this.processFile(req,res);
+      }
+    }
+
+    proc processFile(ref req:Request, ref res:Response){
+       var uri= req.getUri();
+       var (isloadable,filepath) = this.GetLoadableFileName(uri);
+       if(isloadable==true){
+         var content = this.loadFileContent(filepath);
+         res.Write(content);
+         //res.Send();
+       }else{
+         res.E404("Url Or File Not Found");
+       }
+    }
+
+    proc GetLoadableFileName(uri:string):(bool,string){
+      if(exists(this.ROOT_PATH+uri)){
+        if(isDir(this.ROOT_PATH+uri)){
+          if(isFile(this.ROOT_PATH+uri+"/index.html")){
+            return (true,this.ROOT_PATH+uri+"/index.html");
+          }else{
+            return (false,"");
+          }
+        }else if(isFile(this.ROOT_PATH+uri)){
+          return (true,this.ROOT_PATH+uri);
+        }else{
+          return (false,"");
+        }
+      }else{
+        return (false,"");
+      }
+      return (false,"");
+    }
+
+    proc loadFileContent(filepath:string):string{
+      var content:string ="";
+
+      var f = open(filepath, iomode.r,
+                 hints=IOHINT_RANDOM|IOHINT_CACHED|IOHINT_PARALLEL);
+      for line in f.lines() {
+         content+=line;
+      }
+      return content;
+    }
+}
+
+
+
+
 class DummyMiddleware:Middleware{
 
     proc Run(ref req:Request, ref res:Response){
@@ -210,6 +282,9 @@ class Router{
 
 //var MiddlewareList:[1..2]Middleware;
 var MiddlewareList:list(Middleware.type);
+var AfterMiddlewareList:list(Middleware.type);
+
+var FilesServerMiddleware:FileMiddleware=nil;
 //var MiddlewareList:[{1..3}]func(Request,  Response,(Request,Response));
 //var MiddlewareDomain:domain(1)={1..2}
 //var MiddlewareList:[MiddlewareDomain]func(Request,  Response,(Request,Response));
@@ -257,7 +332,30 @@ proc Middlewares(x ...?k){
 proc getMiddleware(){
   return this.MiddlewareList;
 }
+/*
+
+*/
+
+proc AfterMiddlewares(x ...?k){
+  this.AfterMiddlewareList = makeList((...x));
+}
+
+/*
+
+*/
+
+proc getAfterMiddleware(){
+  return this.AfterMiddlewareList;
+}
  
+proc getFileMiddleware():FileMiddleware{
+  return this.FilesServerMiddleware:FileMiddleware;
+}
+ 
+proc setFileMiddleware(m:FileMiddleware){
+  this.FilesServerMiddleware = m;
+}
+
   /*
 Assigns GET url to a function handler.
   */
@@ -352,15 +450,19 @@ proc Process(request:c_ptr(evhttp_request),  privParams:opaque){
       writeln(this.GetRouterDomain.member(path)," = ",path);
           if(this.GetRouterDomain.member(path)!=false){
             var controller = this.GetList[path];       
-           
-            writeln("Served ", path);
-           
-           
+         
+      //      writeln("Served ", path);
              
            controller(req,res);
            
           }else{
-            res.E404();
+           // res.E404();
+           var fm= this.getFileMiddleware();
+           if(fm!=nil){
+             fm.Run(req,res);
+           }else{
+             res.E404("File or Url Not Found");
+           }
           }      
     }
 
@@ -434,7 +536,21 @@ proc Process(request:c_ptr(evhttp_request),  privParams:opaque){
           }      
     }
 
+ var after_middlewares = this.getAfterMiddleware();
+
+    //var reqres:(Request,Response) = (_req,_res);
+    //var (req,res) = reqres;
+
+    for mdl in  after_middlewares{
+       if(mdl!=nil){
+          mdl.Run(req,res);
+       }
+    }
+
+  res.Send();
+
   delete req;
+  delete res;
 
   }
  
@@ -482,8 +598,20 @@ class Request{
     var str=this.GetHeader("Cookie");
     var parts = str.split("; ");
     for part in parts{
+
       var kv = part.split("=");
-        this.cookies[kv[1]]=kv[2];
+      writeln(kv.length);
+      var i=0;
+
+      for x in kv{
+        i+=1;
+      }
+      if( i>=2){
+            this.cookies[kv[1]]=kv[2];
+      }
+
+
+    
     }
  
   }
@@ -571,10 +699,15 @@ class Response{
 
 var buffer:c_ptr(evbuffer);
 var handle:c_ptr(evhttp_request);
+var http_code:int;
+var http_msg:string;
+
 
   proc Response(request:c_ptr(evhttp_request),  privParams:opaque){
     this.handle = request;
     this.buffer = evbuffer_new();
+
+    this.http_code=200;
   }
   /*
   
@@ -615,6 +748,11 @@ Sends the content to the client
   proc E404(str:string="Not Found"){
     this.Write(str);
     this.Send(404,str);
+  }
+
+  proc isError():bool{
+
+    return this.http_code<=400;
   }
   /*
   

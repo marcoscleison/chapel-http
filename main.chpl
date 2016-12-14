@@ -64,9 +64,9 @@ proc main(){
     var routerHandler = server.getRouter();
 
     //Register the middlewares object
-    routerHandler.Middlewares((new TestMiddleware()):Middleware,new TestMiddleware2(),new TestMiddleware3());
-
-
+    //routerHandler.Middlewares((new TestMiddleware()):Middleware,new TestMiddleware2(),new TestMiddleware3(),new FileMiddleware());
+   // routerHandler.AfterMiddlewares(new FileMiddleware():Middleware);
+    routerHandler.setFileMiddleware(new FileMiddleware());
     //Assigns GET / url to a anonymous function 
     routerHandler.Get("/",lambda(req:Request, res:Response):void{
         //req representes the current request, res represents the current response
@@ -93,7 +93,7 @@ proc main(){
     res.Write(html);
  
  
-  res.Send();
+ // res.Send();
   });
 //Assigns POST /url to a anonymous function
  routerHandler.Post("/",lambda(req:Request,  res:Response):void{
@@ -108,7 +108,7 @@ proc main(){
          res.Write("Hi ", login,"Your password is wrong");
      }
      res.Write("<br/><a href='/'>Back</a>");
-     res.Send();
+ //    res.Send();
   });
    
    // Assign th /home url to home procedure.
@@ -128,7 +128,7 @@ proc home_page(req:Request,  res:Response):void{
    writeln( req.GetCookie("Teste2"));
 
     res.Write("Hello World!! <a href='/'>Back</a>");
-    res.Send();
+   // res.Send();
 }
 
 }
