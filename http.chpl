@@ -292,6 +292,9 @@ var FilesServerMiddleware:FileMiddleware=nil;
 var GetRouterDomain: domain(string);
 var GetList:[GetRouterDomain]func(Request,  Response,void);
 
+var FileRouterDomain: domain(string);
+var FileList:[FileRouterDomain]string;
+
 var PostRouterDomain: domain(string);
 var PostList:[PostRouterDomain]func(Request,  Response,void);
 
@@ -419,6 +422,46 @@ Assigns Patch url to a function handler.
 proc Patch(url:string, handler:func(Request,  Response,void)){
     PatchList[url] = handler;     
 }
+
+
+proc loadFileContent(filepath:string):(bool,string){
+//   var filepath:string = "./tmpl/test.html";
+   if((exists(filepath)&&(isFile(filepath)))){
+      var content:string ="";
+      var f = open(filepath, iomode.r,
+                 hints=IOHINT_RANDOM|IOHINT_CACHED|IOHINT_PARALLEL);
+          for line in f.lines() {
+              content+=line;
+          }
+
+            return (true,content);
+
+        }else{
+            return (true,"");
+        }
+
+  }
+proc File(url:string, filepath:string){
+  this.FileList[url] = filepath;
+}
+  /*var handler = lambda(req:Request,  res:Response):void{
+    if((exists(filepath)&&(isFile(filepath)))){
+      var content:string ="";
+      var f = open(filepath, iomode.r,
+                 hints=IOHINT_RANDOM|IOHINT_CACHED|IOHINT_PARALLEL);
+      for line in f.lines() {
+         content+=line;
+      }
+      res.Write(content);
+    }else{
+      res.E404();
+    }
+
+  };
+    this.Get(url,handler);
+}
+*/
+
   
 /*
 
@@ -450,11 +493,18 @@ proc Process(request:c_ptr(evhttp_request),  privParams:opaque){
       writeln(this.GetRouterDomain.member(path)," = ",path);
           if(this.GetRouterDomain.member(path)!=false){
             var controller = this.GetList[path];       
-         
       //      writeln("Served ", path);
-             
-           controller(req,res);
-           
+            if(controller!=nil){
+              controller(req,res);
+            }  
+          } else if(this.FileRouterDomain.member(path)!=false){
+            var filepath = this.FileList[path]; 
+            var (canserve,content) = this.loadFileContent(filepath);
+            if(canserve==true){
+              res.Write(content);
+            }else{
+              res.E404("File, URI or template not Found");
+            }
           }else{
            // res.E404();
            var fm= this.getFileMiddleware();
